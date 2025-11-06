@@ -1,6 +1,6 @@
-# Proyek Tugas Akhir - Platform Kriptografi Agensi
+# Proyek Tugas Akhir - Platform Kriptografi Agensi 🕵️‍♂️
 
-Ini adalah aplikasi web *full-stack* dengan tema "Agen Rahasia", yang mengimplementasikan berbagai algoritma kriptografi untuk komunikasi aman dan penyimpanan data.
+Ini adalah aplikasi web *full-stack* dengan tema "Agen Rahasia", yang mengimplementasikan kriptografi hibrida (simetris + asimetris) untuk komunikasi aman dan penyimpanan data terenkripsi.
 
 -   **Backend:** Laravel 12 (`/cryptoweb-backend`)
 -   **Frontend:** Next.js & Tailwind v3 (`/cryptoweb-frontend`)
@@ -19,6 +19,7 @@ Pastikan laptop baru memiliki *software* berikut:
     * *Catatan: Pastikan Laragon kamu sudah mengaktifkan ekstensi PHP `gd`.*
 2.  **Node.js:** (Versi 18 atau lebih baru)
 3.  **VS Code:** (Editor Kode)
+4.  **Git:** (Sudah ada di Laragon)
 
 ---
 
@@ -66,10 +67,17 @@ Bagian ini untuk menyiapkan *server* API.
     CACHE_STORE=file
     ```
 9.  **Migrasi & Seeding Database (PENTING):**
-    Perintah ini akan membuat semua tabel (`users`, `personal_access_tokens`, `encrypted_messages`, `secure_files`) dan membuat 1 admin *default*.
+    Perintah ini akan membuat semua tabel (`users`, `admin_keys`, `encrypted_messages`, `secure_files`, `personal_access_tokens`) dan membuat 1 admin *default*.
     ```bash
     php artisan migrate:fresh --seed
     ```
+10. **Buat Kunci RSA (SANGAT PENTING):**
+    Ini adalah inti dari sistem keamanan hibrida kita.
+    ```bash
+    php artisan app:generate-rsa-keys
+    ```
+    * Tekan **"yes"** untuk menyimpan Kunci Publik 🔓 ke *database*.
+    * **SIMPAN KUNCI PRIVAT:** Salin (copy) **seluruh** `-----BEGIN PRIVATE KEY----- ... -----END PRIVATE KEY-----` ke *file* `.txt` yang aman. Ini adalah kunci utama Admin.
 
 ---
 
@@ -138,26 +146,28 @@ Kamu perlu menjalankan **kedua server** secara bersamaan.
 
 ### 1. Autentikasi
 * **Login Admin:** Perbandingan *Plaintext* (`admin`/`123`).
-* **Login Agen:** Perbandingan *Hash* **SHA-512**.
-* **Database:** *Password* Agen disimpan sebagai *hash* **SHA-512** (128 karakter) dan *plaintext* (untuk demo "Data Deskripsi").
+* **Login Agen:** Perbandingan *Hash* **SHA-512** (tanpa *salt*). Agen memasukkan *password* asli, *backend* men-*hash*-nya dan membandingkan.
+* **Database Agen:** *Password* Agen disimpan sebagai *hash* **SHA-512** dan *plaintext* (untuk demo "Data Deskripsi").
 
-### 2. Kanal Laporan Rahasia (Scytale + AES)
-* Agen bisa mengirim pesan teks rahasia ke Admin.
-* **Algoritma Super Enkripsi:** **Scytale Cipher** (Klasik) lalu dienkripsi lagi dengan **AES-256-CBC** (Modern).
-* **Kunci:** Menggunakan 2 kunci terpisah: Kunci Scytale (angka) dan Kunci Sesi AES (teks rahasia).
-* **Fitur Pesan Meledak (Self-Destruct):** Agen bisa mencentang "Hancurkan Setelah Dibaca". Setelah Admin mendekripsi pesan ini, pesan akan otomatis terhapus dari *database*.
+### 2. Kanal Laporan Rahasia (Scytale + AES + RSA)
+* **Algoritma Super Enkripsi (Hibrida):**
+    1.  Pesan dienkripsi dengan **Scytale** (Klasik).
+    2.  Hasilnya dienkripsi lagi dengan **kunci AES acak**.
+    3.  Kunci AES acak itu dienkripsi dengan **Kunci Publik RSA Admin**.
+* **Admin Dekripsi:** Admin menggunakan **Kunci Privat RSA** 🔑 miliknya untuk mendekripsi kunci AES, yang kemudian digunakan untuk mendekripsi pesan Scytale.
+* **Fitur:** Mendukung "Pesan Meledak" (Hancur setelah dibaca).
 
 ### 3. Database Target (Camellia + LSB)
-* Agen bisa menyembunyikan data intel (teks) ke dalam foto target (gambar).
-* **Algoritma File (Enkripsi):** Teks intel dienkripsi dulu menggunakan **Camellia-256-CBC**.
-* **Algoritma Steganografi (Metode):** *Ciphertext* hasil Camellia disembunyikan ke dalam gambar menggunakan **LSB (Least Significant Bit) Insertion**.
-* **Objek (Carrier):** Mendukung file `.png`, `.jpg`, `.jpeg`, dan `.gif`. (Disarankan `.png`).
+* **Algoritma Steganografi (Simetris):**
+    1.  Teks "Data Intel" dienkripsi dulu menggunakan **Camellia-256-CBC**.
+    2.  *Ciphertext* (hasil Camellia) disembunyikan ke dalam gambar (`.png`, `.gif`, dll) menggunakan **LSB (Least Significant Bit)**.
+* **Kunci:** Agen dan Admin harus menggunakan "Kunci Enkripsi (Camellia)" yang sama (dibagikan di luar sistem) untuk fitur ini.
 
-### 4. Secure Vault (Camellia File Encryption)
-* Agen bisa meng-*upload* berkas rahasia (seperti `.pdf`, `.zip`, `.txt`) ke *database* aman.
-* **Algoritma File (Enkripsi):** Seluruh isi *file* dienkripsi menggunakan **Camellia-256-CBC**.
-* **Penyimpanan:** *File* terenkripsi disimpan di *server* (`storage/app/vault/`).
-* **Akses:** Admin bisa men-*download* dan mendekripsi *file* tersebut menggunakan kunci yang benar.
+### 4. Secure Vault (Camellia + RSA)
+* **Algoritma File (Hibrida):**
+    1.  Seluruh isi *file* (PDF, ZIP, dll) dienkripsi dengan **kunci Camellia acak**.
+    2.  Kunci Camellia acak itu dienkripsi dengan **Kunci Publik RSA Admin**.
+* **Admin Dekripsi:** Admin menggunakan **Kunci Privat RSA** 🔑 miliknya untuk mendekripsi kunci Camellia, yang kemudian digunakan untuk mendekripsi *file*.
 
 ---
 
@@ -165,16 +175,12 @@ Kamu perlu menjalankan **kedua server** secara bersamaan.
 
 #### Error: `GD Library extension not available` (Saat Steganografi / Database Target)
 Ini berarti PHP kamu belum mengaktifkan modul gambar.
-
-1.  Buka **Laragon**.
-2.  Klik kanan di jendela Laragon -> **PHP** -> **Extensions**.
-3.  Cari `gd` di daftar itu dan **klik** untuk memberinya tanda **centang (✓)**.
-4.  Laragon akan otomatis me-restart Apache.
-5.  Hentikan dan jalankan lagi `php artisan serve`.
+1.  Klik kanan di jendela **Laragon** -> **PHP** -> **Extensions**.
+2.  Cari `gd` di daftar itu dan **klik** untuk memberinya tanda **centang (✓)**.
+3.  Hentikan dan jalankan lagi `php artisan serve`.
 
 #### Error: "Gagal terhubung ke server" (Saat Tambah User / Kirim Pesan)
 Ini 99% adalah *error cache* di Laravel.
-
 1.  Hentikan server `php artisan serve` (`Ctrl` + `C`).
 2.  Jalankan 2 perintah ini di terminal *backend*:
     ```bash
