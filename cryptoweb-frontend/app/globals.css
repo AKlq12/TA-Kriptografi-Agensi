@@ -1,0 +1,21 @@
+/* app/globals.css (VERSI HACKER/HITMAN) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Style input baru: tajam, gelap, dengan fokus merah */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+textarea,
+input[type="file"] {
+  @apply w-full px-4 py-3 border rounded-none bg-gray-900 border-gray-700 text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-red-600 focus:border-red-600 transition-colors duration-200;
+}
+
+/* Kustomisasi file input */
+input[type="file"] {
+  @apply p-0;
+}
+input[type="file"]::file-selector-button {
+  @apply bg-gray-800 border-0 border-r border-gray-700 px-4 py-3 mr-4 text-gray-400 font-semibold hover:bg-gray-700 cursor-pointer transition-colors duration-200;
+}
